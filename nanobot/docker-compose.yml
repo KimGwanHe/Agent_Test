@@ -1,0 +1,82 @@
+name: agent-test-nanobot
+
+services:
+  # ─── 이미지 빌드 전용 (프로파일 없음 → docker compose build 가능) ──
+  nanobot-base:
+    build: .
+    image: agent-test/nanobot:latest
+    # container_name: nanobot-base
+    # profiles:
+    #   - build-only   # 직접 실행 안 함, 빌드용
+
+  # ─── CLI: 단발성 명령 (테스트, 디버깅) ──────────────────────
+  nanobot-cli:
+    image: agent-test/nanobot:latest
+    container_name: nanobot-cli
+    depends_on:
+      - nanobot-base
+    env_file:
+      - ../.env
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    volumes:
+      - ./config/config.json:/root/.nanobot/config.json
+      - ./workspace:/root/.nanobot/workspace
+      - ./skills:/root/.nanobot/skills
+    entrypoint: ["nanobot"]
+    stdin_open: true
+    tty: true
+    networks:
+      - agent-net
+    profiles:
+      - cli
+
+  # ─── Gateway: 백그라운드 상시 실행 ──────────────────────────
+  nanobot-gateway:
+    image: agent-test/nanobot:latest
+    container_name: nanobot-gateway
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    volumes:
+      - ./config/config.json:/root/.nanobot/config.json
+      - ./workspace:/root/.nanobot/workspace
+      - ./skills:/root/.nanobot/skills
+    ports:
+      - "18790:18790"
+    command: ["gateway"]
+    networks:
+      - agent-net
+    profiles:
+      - gateway
+
+  # ─── Ollama: 로컬 LLM 서버 ──────────────────────────────────
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: nanobot-ollama
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ollama-data:/root/.ollama
+  #   ports:
+  #     - "11434:11434"       # 브라우저/외부에서 접근: http://서버IP:11434
+  #   networks:
+  #     - agent-net
+  #   # GPU 있으면 아래 주석 해제
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+
+networks:
+  agent-net:
+    name: agent-test-network
+    driver: bridge
+
+volumes:
+  ollama-data:
+    name: agent-test-ollama-data
